@@ -1,32 +1,37 @@
+// src/app.js
 const express = require('express');
-const mongoose = require('mongoose');
 require('dotenv').config();
+const sequelize = require('./db');
 const postRoutes = require('./routes/posts');
 
 const app = express();
 app.use(express.json());
 
-// // req.user is attached by gateway
-// app.use((req, res, next) => {
-//   next();
-// });
-
+// Extract user from headers
 app.use((req, res, next) => {
-  // Reconstruct req.user from headers
   if (req.headers['x-user-id']) {
     req.user = {
-      id: req.headers['x-user-id'],
-      role: req.headers['x-user-role'] || 'user'
+      id: parseInt(req.headers['x-user-id']),
+      role: req.headers['x-user-role'] || 'user',
     };
   }
   next();
 });
+
+// Routes
 app.use('/', postRoutes);
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/doc-swram-posts';
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('Post DB connected'))
-  .catch(err => console.error(err));
+// Health
+app.get('/', (req, res) => res.send('Post Service OK'));
 
-const PORT = 4002;
-app.listen(PORT, () => console.log(`Post Service @ :${PORT}`));
+const PORT = process.env.PORT || 4002;
+
+app.listen(PORT, async () => {
+  console.log(`Post Service @ :${PORT}`);
+  try {
+    await sequelize.sync({ alter: true });
+    console.log('Posts table ready');
+  } catch (err) {
+    console.error('DB sync error:', err);
+  }
+});
