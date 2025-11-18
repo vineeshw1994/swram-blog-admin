@@ -2,6 +2,7 @@
 const express = require('express');
 require('dotenv').config();
 const sequelize = require('./db');
+
 const postRoutes = require('./routes/posts');
 
 const app = express();
@@ -21,17 +22,52 @@ app.use((req, res, next) => {
 // Routes
 app.use('/', postRoutes);
 
-// Health
-app.get('/', (req, res) => res.send('Post Service OK'));
+// Health check endpoint
+app.get('/health', async (req, res) => {
+  try {
+    await sequelize.authenticate();
+    res.json({ 
+      status: 'ok', 
+      service: 'Admin Service',
+      database: 'connected',
+      time: new Date().toISOString() 
+    });
+  } catch (error) {
+    res.status(503).json({ 
+      status: 'error', 
+      service: 'Admin Service',
+      database: 'disconnected',
+      error: error.message,
+      time: new Date().toISOString() 
+    });
+  }
+});
+
+// Root endpoint
+app.get('/', (req, res) => res.send('Admin Service OK'));
 
 const PORT = process.env.PORT || 4002;
 
 app.listen(PORT, async () => {
-  console.log(`Post Service @ :${PORT}`);
-  try {
-    await sequelize.sync({ alter: true });
-    console.log('Posts table ready');
-  } catch (err) {
-    console.error('DB sync error:', err);
+  console.log(`Admin Service @ :${PORT}`);
+  
+  // Safe database sync - only in development or if explicitly enabled
+  if (process.env.NODE_ENV === 'development' || process.env.DB_SYNC === 'true') {
+    try {
+      console.log('🔄 Checking database tables...');
+      await sequelize.sync({ 
+        alter: process.env.DB_SYNC === 'alter',
+        force: false // Never force in production
+      });
+      console.log('✅ Database tables ready');
+    } catch (err) {
+      console.error('❌ DB sync error:', err.message);
+      // Don't crash the app for sync errors in production
+      if (process.env.NODE_ENV !== 'production') {
+        throw err;
+      }
+    }
+  } else {
+    console.log('ℹ️  Database sync disabled - using existing tables');
   }
 });
